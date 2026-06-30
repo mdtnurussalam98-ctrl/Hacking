@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full select-none">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>System Intrusion - Mainframe Terminal</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Font: JetBrains Mono & Share Tech Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  
+  <style>
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background-color: #020617;
+    }
+    .retro-font {
+      font-family: 'Share Tech Mono', monospace;
+    }
+    
+    /* Scanlines effect */
+    .scanlines {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: linear-gradient(
+        rgba(18, 16, 16, 0) 50%, 
+        rgba(0, 0, 0, 0.35) 50%
+      ), linear-gradient(
+        90deg,
+        rgba(255, 0, 0, 0.05),
+        rgba(0, 255, 0, 0.02),
+        rgba(0, 0, 255, 0.05)
+      );
+      background-size: 100% 4px, 4px 100%;
+      pointer-events: none;
+      z-index: 40;
+    }
+
+    /* Screen flicker animation to feel like real retro terminal */
+    @keyframes flicker {
+      0% { opacity: 0.97; }
+      50% { opacity: 1; }
+      100% { opacity: 0.98; }
+    }
+    .crt-screen {
+      animation: flicker 0.15s infinite;
+    }
+
+    /* Terminal Cursor simulation */
+    .cursor::after {
+      content: "█";
+      animation: blink 0.8s infinite;
+    }
+    @keyframes blink {
+      0%, 49% { opacity: 1; }
+      50%, 100% { opacity: 0; }
+    }
+
+    /* Glitch text effect on hover */
+    @keyframes glitch {
+      0% { transform: translate(0) }
+      20% { transform: translate(-2px, 2px) }
+      40% { transform: translate(-2px, -2px) }
+      60% { transform: translate(2px, 2px) }
+      80% { transform: translate(2px, -2px) }
+      100% { transform: translate(0) }
+    }
+    .glitch-text:hover {
+      animation: glitch 0.3s infinite;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(0,0,0,0.3);
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #10b981;
+      border-radius: 2px;
+    }
+  </style>
+</head>
+<body class="h-full text-emerald-400 overflow-hidden relative crt-screen">
+
+  <!-- Scanlines & Matrix Code Rain Overlay -->
+  <div class="scanlines"></div>
+  <canvas id="matrixCanvas" class="absolute inset-0 w-full h-full opacity-30 z-0 pointer-events-none"></canvas>
+
+  <div id="mainTerminal" class="absolute inset-0 flex flex-col justify-between p-4 md:p-6 z-10 h-[100dvh]">
+    
+    <!-- Top Information Status Bar -->
+    <header class="flex flex-wrap justify-between items-center pb-3 border-b border-emerald-500/30 gap-y-2 text-xs md:text-sm">
+      <div class="flex items-center space-x-3">
+        <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
+        <span class="font-extrabold uppercase tracking-widest retro-font text-emerald-300">SYSTEM INTRUSION IN PROGRESS</span>
+      </div>
+      <div class="flex items-center space-x-4 text-emerald-500/70">
+        <div>IP: <span id="mockIp">127.0.0.1</span></div>
+        <div class="hidden sm:block">TARGET: <span class="text-rose-400">REMOTE_HOST_99F3</span></div>
+        <!-- Unobtrusive Audio Toggle -->
+        <button id="headerAudioToggle" class="flex items-center space-x-1.5 border border-emerald-500/30 px-2 py-1 rounded bg-emerald-950/20 hover:bg-emerald-500 hover:text-black transition-all text-[10px]">
+          <span id="audioIcon">🔊</span> <span id="audioText">SUARA: ON</span>
+        </button>
+        <div id="clock">00:00:00</div>
+      </div>
+    </header>
+
+    <!-- Console Logging Window -->
+    <main class="flex-1 my-4 overflow-y-auto custom-scrollbar flex flex-col-reverse text-xs sm:text-sm font-mono leading-relaxed">
+      <div id="terminalOutput" class="space-y-1.5 flex flex-col justify-end">
+        <!-- Log items will render here dynamically -->
+      </div>
+    </main>
+
+    <!-- Footer Progress and Control Section -->
+    <footer class="p-4 border border-emerald-500/30 bg-emerald-950/10 backdrop-blur-sm rounded-lg">
+      <div class="flex justify-between items-center mb-2 text-xs md:text-sm">
+        <span id="currentStatusText" class="uppercase tracking-wider font-extrabold animate-pulse">BOOTING INTRUDER V2...</span>
+        <span id="percentageText" class="font-bold">0%</span>
+      </div>
+      <!-- Progress Bar Tracker -->
+      <div class="w-full bg-emerald-950/50 rounded-full h-3.5 border border-emerald-500/20 overflow-hidden relative">
+        <div id="progressBar" class="bg-gradient-to-r from-emerald-600 via-emerald-400 to-emerald-300 h-full w-0 transition-all duration-300 ease-out shadow-[0_0_10px_rgba(52,211,153,0.5)]"></div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Prank Reveal Modal Screen -->
+  <div id="prankScreen" class="hidden absolute inset-0 flex items-center justify-center bg-black/95 z-40 p-4 overflow-y-auto">
+    <div class="max-w-lg w-full border border-rose-500/40 bg-rose-950/10 backdrop-blur-md p-6 sm:p-8 rounded-xl shadow-[0_0_50px_rgba(239,68,68,0.2)] text-center my-auto transition-transform duration-500 scale-95" id="prankCard">
+      
+      <!-- Danger/Alert Prank Icon -->
+      <div class="text-rose-500 mb-4 inline-flex justify-center animate-bounce">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-16 h-16 sm:w-20 sm:h-20">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+        </svg>
+      </div>
+
+      <h2 class="text-3xl sm:text-4xl font-extrabold text-rose-500 tracking-wider mb-2 retro-font uppercase glitch-text">
+        ⚠️ PRANK! ⚠️
+      </h2>
+      <p class="text-xl font-bold text-white mb-6 uppercase tracking-wide">Tenang... Tidak ada yang diretas.</p>
+      
+      <div class="space-y-4 text-left border border-rose-500/20 bg-rose-950/30 p-4 rounded-lg text-rose-100 text-xs sm:text-sm leading-relaxed mb-8">
+        <p class="font-bold text-rose-400 border-b border-rose-500/20 pb-2 flex items-center">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4.5 h-4.5 mr-2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 111.063.852l-.708 2.836a.75.75 0 001.063.852l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+          </svg>
+          SISTEM AMAN & TERLINDUNGI
+        </p>
+        <p>Ini hanya <strong>simulasi efek visual fiksi hacker</strong> untuk tujuan hiburan semata.</p>
+        <p>Semua animasi yang baru saja ditampilkan adalah efek visual fiktif dan <strong>tidak melakukan aktivitas apa pun terhadap perangkat Anda (tidak mengakses data pribadi, kamera, file, atau sistem asli perangkat).</strong></p>
+      </div>
+
+      <div class="text-lg font-bold text-emerald-400 mb-8 retro-font tracking-widest uppercase">
+        😂 Have a Nice Day 😂
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <button id="restartBtn" class="flex items-center justify-center space-x-2 bg-emerald-500 text-black hover:bg-emerald-400 font-extrabold py-3 px-4 rounded-lg transition-all duration-300 tracking-wider text-sm shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:shadow-[0_0_20px_rgba(16,185,129,0.5)]">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+          </svg>
+          <span>Ulangi Prank</span>
+        </button>
+
+        <button id="shareBtn" class="flex items-center justify-center space-x-2 bg-rose-600 text-white hover:bg-rose-500 font-extrabold py-3 px-4 rounded-lg transition-all duration-300 tracking-wider text-sm shadow-[0_0_15px_rgba(239,68,68,0.3)] hover:shadow-[0_0_20px_rgba(239,68,68,0.5)]">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186l5.308-2.654m-5.308 2.654l5.308 2.654m1.114-1.078a2.25 2.25 0 100-2.186m0 2.186l-5.308-2.654m5.308 2.654l-5.308 2.654m9.75-5.155a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zM12 18.75a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+          </svg>
+          <span id="shareBtnText">Bagikan ke Teman</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("matrixCanvas");
+    const ctx = canvas.getContext("2d");
+
+    let columns = 0;
+    let drops = [];
+    const charList = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789$#@%&*+=:?ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ".split("");
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      columns = Math.floor(canvas.width / 16);
+      drops = [];
+      for (let i = 0; i < columns; i++) {
+        drops[i] = Math.random() * -100;
+      }
+    }
+
+    function drawMatrix() {
+      ctx.fillStyle = "rgba(2, 6, 23, 0.08)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = "#10b981"; 
+      ctx.font = "14px monospace";
+
+      for (let i = 0; i < drops.length; i++) {
+        const text = charList[Math.floor(Math.random() * charList.length)];
+        const x = i * 16;
+        const y = drops[i] * 16;
+
+        if (Math.random() > 0.95) {
+          ctx.fillStyle = "#a7f3d0"; // White head trail
+        } else {
+          ctx.fillStyle = "#10b981";
+        }
+
+        ctx.fillText(text, x, y);
+
+        if (y > canvas.height && Math.random() > 0.975) {
+          drops[i] = 0;
+        }
+        drops[i]++;
+      }
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+    setInterval(drawMatrix, 33);
+
+    function updateClock() {
+      const date = new Date();
+      const h = String(date.getHours()).padStart(2, '0');
+      const m = String(date.getMinutes()).padStart(2, '0');
+      const s = String(date.getSeconds()).padStart(2, '0');
+      document.getElementById("clock").innerText = `${h}:${m}:${s}`;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // Generate random realistic internal fake IPs
+    const firstOctet = [10, 192, 172][Math.floor(Math.random() * 3)];
+    const mockHostIp = firstOctet === 192 ? `192.168.${Math.floor(Math.random() * 254) + 1}.${Math.floor(Math.random() * 254) + 1}` : `${firstOctet}.${Math.floor(Math.random() * 100) + 10}.${Math.floor(Math.random() * 254) + 1}.${Math.floor(Math.random() * 254) + 1}`;
+    document.getElementById("mockIp").innerText = mockHostIp;
+
+    let audioCtx = null;
+    let isSoundEnabled = true;
+
+    function initAudio() {
+      if (!isSoundEnabled) return;
+      if (audioCtx) return; 
+      try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContext();
+      } catch (e) {
+        console.warn("Web Audio API not supported", e);
+      }
+    }
+
+    // Synthesizer beep sounds to emulate digital computer terminals
+    function playBeep(frequency, duration, type = "sine", gainVal = 0.08) {
+      if (!audioCtx || !isSoundEnabled) return;
+      try {
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+        const osc = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+
+        osc.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        osc.type = type;
+        osc.frequency.setValueAtTime(frequency, audioCtx.currentTime);
+        gainNode.gain.setValueAtTime(gainVal, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + duration);
+
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch (err) {}
+    }
+
+    // Low background humming sound
+    let humNode = null;
+    function startSystemHum() {
+      if (!audioCtx || !isSoundEnabled || humNode) return;
+      try {
+        const humOsc = audioCtx.createOscillator();
+        const humGain = audioCtx.createGain();
+        humOsc.type = "sine";
+        humOsc.frequency.setValueAtTime(55, audioCtx.currentTime); // 55Hz Low Sub Hum
+        humGain.gain.setValueAtTime(0.02, audioCtx.currentTime);
+        humOsc.connect(humGain);
+        humGain.connect(audioCtx.destination);
+        humOsc.start();
+        humNode = { osc: humOsc, gain: humGain };
+      } catch (e) {}
+    }
+
+    function stopSystemHum() {
+      if (humNode) {
+        try { humNode.osc.stop(); } catch (e){}
+        humNode = null;
+      }
+    }
+
+    function playIntruderAlert() {
+      if (!audioCtx || !isSoundEnabled) return;
+      let start = audioCtx.currentTime;
+      for (let i = 0; i < 3; i++) {
+        const osc = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        osc.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        osc.type = "sawtooth";
+        osc.frequency.setValueAtTime(900 - (i * 150), start + (i * 0.12));
+        osc.frequency.exponentialRampToValueAtTime(400, start + (i * 0.12) + 0.1);
+        gainNode.gain.setValueAtTime(0.06, start + (i * 0.12));
+        gainNode.gain.exponentialRampToValueAtTime(0.001, start + (i * 0.12) + 0.1);
+        osc.start(start + (i * 0.12));
+        osc.stop(start + (i * 0.12) + 0.11);
+      }
+    }
+
+    function playSuccessChime() {
+      if (!audioCtx || !isSoundEnabled) return;
+      try {
+        let now = audioCtx.currentTime;
+        [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
+          const osc = audioCtx.createOscillator();
+          const gainNode = audioCtx.createGain();
+          osc.connect(gainNode);
+          gainNode.connect(audioCtx.destination);
+          osc.type = "triangle";
+          osc.frequency.setValueAtTime(freq, now + (i * 0.08));
+          gainNode.gain.setValueAtTime(0.06, now + (i * 0.08));
+          gainNode.gain.exponentialRampToValueAtTime(0.001, now + (i * 0.08) + 0.3);
+          osc.start(now + (i * 0.08));
+          osc.stop(now + (i * 0.08) + 0.3);
+        });
+      } catch (e){}
+    }
+
+    function playGlitchNoise() {
+      if (!audioCtx || !isSoundEnabled) return;
+      try {
+        let bufferSize = audioCtx.sampleRate * 0.4;
+        let buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        let data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = Math.random() * 2 - 1;
+        }
+        let noise = audioCtx.createBufferSource();
+        noise.buffer = buffer;
+        let filter = audioCtx.createBiquadFilter();
+        filter.type = 'peaking';
+        filter.frequency.value = 450;
+        let gain = audioCtx.createGain();
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(audioCtx.destination);
+        noise.start();
+      } catch (e){}
+    }
+
+    const simulationSteps = [
+      {
+        percentage: 5,
+        status: "Booting system...",
+        logs: [
+          "[SYSTEM] Initializing virtual system kernel v11.39...",
+          "[SYSTEM] System Architecture: WebKit Sandbox Mode VM",
+          "[SYSTEM] Running virtual diagnostic checks...",
+          "[SYSTEM] Mount completed. Allocating virtual tty terminal..."
+        ]
+      },
+      {
+        percentage: 15,
+        status: "Initializing secure terminal...",
+        logs: [
+          "[SHELL] Allocating memory sandbox index: 0x8F9C00",
+          "[SHELL] Setting temporary virtual shell path: /bin/zsh",
+          "[SHELL] Generating session ID: USER_PRANK_ENV_9381",
+          "[OK] Emulating local secure mainframe pipeline..."
+        ]
+      },
+      {
+        percentage: 28,
+        status: "Establishing encrypted connection...",
+        logs: [
+          "[ROUTE] Routing anonymous proxies to avoid detection...",
+          "[ROUTE] Proxy 1: localhost -> 203.0.113.8 (Tokyo, JP)",
+          "[ROUTE] Proxy 2: 203.0.113.8 -> 185.11.21.90 (Munich, DE)",
+          "[ROUTE] Proxy 3: 185.11.21.90 -> 103.85.10.4 (Jakarta, ID)",
+          "[OK] High encrypted virtual link active."
+        ]
+      },
+      {
+        percentage: 40,
+        status: "Scanning virtual network...",
+        logs: [
+          "[SCAN] Sweeping open ports on target simulation matrix...",
+          "[SCAN] Port 21 (FTP) - CLOSED",
+          "[SCAN] Port 22 (SSH) - FILTERED",
+          "[SCAN] Port 80 (HTTP) - SIMULATING LISTENING",
+          "[SCAN] Port 443 (HTTPS) - INTRUDING VIRTUAL PROTOCOLS",
+          "[OK] Mock vector path identified on Port 443."
+        ]
+      },
+      {
+        percentage: 53,
+        status: "Loading fake exploit modules...",
+        logs: [
+          "[LOAD] Importing hacking tool signature signatures...",
+          "[LOAD] Target payload selection: linux/x64/fake_meterpreter_reverse",
+          "[LOAD] Compiling mock buffer overflow pointers (0x7FFFFFFFE12C)",
+          "[OK] Exploit payload successfully compiled in virtual memory."
+        ]
+      },
+      {
+        percentage: 65,
+        status: "Bypassing fake firewall...",
+        logs: [
+          "[FIREWALL] Mainframe IPS / Deep Packet Inspection active.",
+          "[FIREWALL] Triggering sequence number prediction array...",
+          "[FIREWALL] Sending 700 fake SYN packet floods to bypass detection...",
+          "[OK] Virtual firewall bypass success (Return Code: 200 OK)."
+        ]
+      },
+      {
+        percentage: 78,
+        status: "Decrypting virtual database...",
+        logs: [
+          "[SQLi] Launching virtual blind SQL injection injection sequence...",
+          "[DECRYPT] Retrieving mock encryption salt key...",
+          "[DECRYPT] Hash Recovery Key: MD5(admin:hash7a28) ... CRACKED",
+          "[DATA] Extracting data blocks from mock.user table..."
+        ]
+      },
+      {
+        percentage: 88,
+        status: "Uploading prank payload...",
+        logs: [
+          "[TRANS] Tunneling script payloads into simulated pipeline...",
+          "[TRANS] Sending visual block data chunk 0x0113C...",
+          "[TRANS] Upload status: 100% complete.",
+          "[EXEC] Executing remote terminal shell command..."
+        ]
+      },
+      {
+        percentage: 95,
+        status: "Finalizing simulation...",
+        logs: [
+          "[CLEANUP] Deleting audit trace footprints from /var/log/auth.log...",
+          "[CLEANUP] Virtual trace deleted successfully.",
+          "[FINALIZE] Executing visual terminal prank overlay..."
+        ]
+      },
+      {
+        percentage: 100,
+        status: "PROSES SELESAI!",
+        logs: [
+          "[SYSTEM] SIMULATION COMPLETE.",
+          "[ALERT] EXPLOIT MOUNTED SUCCESSFULLY. STAND BY."
+        ]
+      }
+    ];
+
+    const mainTerminal = document.getElementById("mainTerminal");
+    const terminalOutput = document.getElementById("terminalOutput");
+    const progressBar = document.getElementById("progressBar");
+    const percentageText = document.getElementById("percentageText");
+    const currentStatusText = document.getElementById("currentStatusText");
+    const prankScreen = document.getElementById("prankScreen");
+    const prankCard = document.getElementById("prankCard");
+    const headerAudioToggle = document.getElementById("headerAudioToggle");
+    const audioIcon = document.getElementById("audioIcon");
+    const audioText = document.getElementById("audioText");
+
+    let stepIndex = 0;
+    let logQueue = [];
+
+    function updateAudioUI() {
+      if (isSoundEnabled) {
+        audioIcon.innerText = "🔊";
+        audioText.innerText = "SUARA: ON";
+      } else {
+        audioIcon.innerText = "🔇";
+        audioText.innerText = "SUARA: OFF";
+      }
+    }
+
+    headerAudioToggle.addEventListener("click", (e) => {
+      e.stopPropagation(); // Prevent duplicate touch triggers
+      isSoundEnabled = !isSoundEnabled;
+      updateAudioUI();
+      if (isSoundEnabled) {
+        initAudio();
+        startSystemHum();
+      } else {
+        stopSystemHum();
+      }
+    });
+
+    // Unlock Audio Context on first interactive click/touch on the screen
+    function unlockAudioOnInteraction() {
+      if (isSoundEnabled) {
+        initAudio();
+        if (audioCtx && audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+        startSystemHum();
+      }
+      document.removeEventListener("click", unlockAudioOnInteraction);
+      document.removeEventListener("touchstart", unlockAudioOnInteraction);
+    }
+    document.addEventListener("click", unlockAudioOnInteraction);
+    document.addEventListener("touchstart", unlockAudioOnInteraction);
+
+    window.addEventListener("DOMContentLoaded", () => {
+      setTimeout(() => {
+        runSimulationStep();
+      }, 300);
+    });
+
+    function runSimulationStep() {
+      if (stepIndex >= simulationSteps.length) {
+        finishSimulation();
+        return;
+      }
+
+      const currentStep = simulationSteps[stepIndex];
+      
+      progressBar.style.width = currentStep.percentage + "%";
+      percentageText.innerText = currentStep.percentage + "%";
+      currentStatusText.innerText = currentStep.status;
+
+      logQueue = [...currentStep.logs];
+      printLogs(() => {
+        stepIndex++;
+        const stepDelay = Math.floor(Math.random() * 500) + 300;
+        setTimeout(runSimulationStep, stepDelay);
+      });
+    }
+
+    function printLogs(callback) {
+      if (logQueue.length === 0) {
+        callback();
+        return;
+      }
+
+      const lineText = logQueue.shift();
+      const pElement = document.createElement("p");
+      pElement.className = "leading-5 tracking-wide text-emerald-400 opacity-90";
+      
+      if (lineText.includes("[WARN]")) {
+        pElement.className = "leading-5 tracking-wide text-amber-400";
+      } else if (lineText.includes("[SYSTEM]")) {
+        pElement.className = "leading-5 tracking-wide text-blue-400";
+      } else if (lineText.includes("[OK]")) {
+        pElement.className = "leading-5 tracking-wide text-emerald-300 font-bold";
+      } else if (lineText.includes("[ALERT]")) {
+        pElement.className = "leading-5 tracking-wide text-rose-500 font-bold animate-pulse";
+      }
+
+      terminalOutput.appendChild(pElement);
+      mainTerminal.querySelector("main").scrollTop = mainTerminal.querySelector("main").scrollHeight;
+
+      let charIdx = 0;
+      function typeChar() {
+        if (charIdx < lineText.length) {
+          pElement.innerHTML = lineText.substring(0, charIdx + 1) + '<span class="cursor"></span>';
+          charIdx++;
+          
+          if (charIdx % 3 === 0) {
+            playBeep(2100, 0.01, "triangle", 0.04);
+          }
+          
+          setTimeout(typeChar, Math.floor(Math.random() * 12) + 4);
+        } else {
+          pElement.innerHTML = lineText;
+          setTimeout(() => printLogs(callback), Math.floor(Math.random() * 100) + 30);
+        }
+      }
+      typeChar();
+    }
+
+    function finishSimulation() {
+      stopSystemHum();
+      playGlitchNoise();
+      
+      document.body.classList.add("bg-rose-950/40");
+      
+      setTimeout(() => {
+        playSuccessChime();
+        document.body.classList.remove("bg-rose-950/40");
+        
+        prankScreen.classList.remove("hidden");
+        setTimeout(() => {
+          prankCard.classList.remove("scale-95");
+          prankCard.classList.add("scale-100");
+        }, 80);
+      }, 500);
+    }
+
+    // Restart Simulator Action
+    document.getElementById("restartBtn").addEventListener("click", () => {
+      terminalOutput.innerHTML = "";
+      stepIndex = 0;
+      progressBar.style.width = "0%";
+      percentageText.innerText = "0%";
+      currentStatusText.innerText = "BOOTING INTRUDER V2...";
+      
+      prankScreen.classList.add("hidden");
+      prankCard.classList.remove("scale-100");
+      prankCard.classList.add("scale-95");
+      
+      startSystemHum();
+      playIntruderAlert();
+      runSimulationStep();
+    });
+
+    // Share Prank Action via standard API with clipboard fallbacks
+    document.getElementById("shareBtn").addEventListener("click", () => {
+      const pageUrl = window.location.href;
+      const shareText = `Gawat, sepertinya sistem keamanan di perangkat saya baru saja diretas! Coba cek milikmu di sini: ${pageUrl}`;
+      
+      if (navigator.share) {
+        navigator.share({
+          title: 'Hacker Intrusion Simulator',
+          text: 'Perangkat kamu dalam bahaya! Cepat periksa di sini:',
+          url: pageUrl
+        }).catch(() => {});
+      } else {
+        const tempTextArea = document.createElement("textarea");
+        tempTextArea.value = shareText;
+        document.body.appendChild(tempTextArea);
+        tempTextArea.select();
+        try {
+          document.execCommand('copy');
+          const shareBtnText = document.getElementById("shareBtnText");
+          shareBtnText.innerText = "Tautan Disalin! ✔";
+          playBeep(880, 0.1, "sine");
+          
+          setTimeout(() => {
+            shareBtnText.innerText = "Bagikan ke Teman";
+          }, 3000);
+        } catch (err) {}
+        document.body.removeChild(tempTextArea);
+      }
+    });
+  </script>
+</body>
+</html>
